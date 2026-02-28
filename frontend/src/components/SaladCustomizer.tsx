@@ -107,10 +107,10 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-xl overflow-hidden max-w-4xl w-full mx-4">
-      <div className="grid md:grid-cols-2 gap-0">
+    <div className="bg-white rounded-xl shadow-xl overflow-hidden w-[95vw] max-w-3xl md:max-w-4xl mx-auto">
+      <div className="grid lg:grid-cols-[0.95fr_1.05fr] gap-0">
         {/* Imagen de la ensalada */}
-        <div className="relative h-64 md:h-auto bg-gray-100">
+        <div className="relative h-44 sm:h-56 lg:h-auto bg-gray-100">
           <Image
             src={salad.imagenUrl}
             alt={salad.nombre}
@@ -141,7 +141,7 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
         </div>
 
         {/* Contenido de personalización */}
-        <div className="p-6 overflow-y-auto max-h-[80vh] md:max-h-none">
+        <div className="p-4 sm:p-6 overflow-y-auto max-h-[85vh] lg:max-h-none">
           {/* Título y precio */}
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-1">
@@ -175,7 +175,7 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
             <p className="text-sm text-gray-500 mb-3">
               Desmarca los ingredientes que NO quieres en tu ensalada
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
               {salad.ingredientesDefault.map((ingrediente) => (
                 <label
                   key={ingrediente}
