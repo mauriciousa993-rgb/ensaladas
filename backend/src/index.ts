@@ -1,113 +1,215 @@
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+﻿import express, { Request, Response, NextFunction } from 'express';
+import cors, { CorsOptions } from 'cors';
 import dotenv from 'dotenv';
-
-// Importar configuración de conexión
 import connectDB from './config/database';
+import { Salad } from './models/Salad';
+import { Order, EstadoPago } from './models/Order';
 
-// Importar modelos
-import { Salad, ISalad } from './models/Salad';
-import {
-  Order,
-  IOrder,
-  ISaladItem,
-  IDatosCliente,
-  IDireccion,
-  TipoEntrega,
-  MetodoPago,
-  EstadoPago,
-  EstadoOrden,
-} from './models/Order';
-
-// Cargar variables de entorno
 dotenv.config();
 
-// Inicializar Express
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = Number(process.env.PORT) || 3002;
 
-// Middleware
-app.use(cors());
+function getAllowedOrigins(): string[] {
+  const origins = process.env.CORS_ORIGINS || '';
+  return origins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+const allowedOrigins = getAllowedOrigins();
+
+function isOriginAllowed(origin: string): boolean {
+  if (allowedOrigins.length === 0) return true;
+
+  return allowedOrigins.some((allowedOrigin) => {
+    if (allowedOrigin.startsWith('https://*.')) {
+      const suffix = allowedOrigin.replace('https://*', '');
+      return origin.startsWith('https://') && origin.endsWith(suffix);
+    }
+    return origin === allowedOrigin;
+  });
+}
+
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || isOriginAllowed(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Origen no permitido por CORS'));
+  },
+};
+
+function generarNumeroOrden(count: number): string {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const numero = (count + 1).toString().padStart(4, '0');
+  return `ORD-${year}${month}${day}-${numero}`;
+}
+
+function generarUrlPagoSimulada(numeroOrden: string, total: number): string {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const redirectUrl = process.env.WOMPI_REDIRECT_URL || `${frontendUrl}/payment/response`;
+  const pagoId = `pago_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  return `https://sandbox.wompi.co/payment-requests/${pagoId}?amount=${total * 100}&currency=COP&reference=${numeroOrden}&redirect_url=${encodeURIComponent(redirectUrl)}`;
+}
+
+function normalizeOrder<T extends Record<string, any>>(order: T): T & { fechaCreacion?: Date } {
+  return {
+    ...order,
+    fechaCreacion: order.fechaCreacion || order.createdAt,
+  };
+}
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
-// Conectar a MongoDB
 connectDB();
 
-// Rutas de ejemplo
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({ ok: true, service: 'ensaladas-backend' });
+});
 
-// GET - Obtener todas las ensaladas
-app.get('/api/salads', async (req: Request, res: Response) => {
+app.get('/api/salads', async (_req: Request, res: Response) => {
   try {
     const salads = await Salad.find({ estaActiva: true });
     res.json(salads);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener las ensaladas' });
+    res.status(500).json({ success: false, error: 'Error al obtener las ensaladas' });
   }
 });
 
-// GET - Obtener una ensalada por ID
 app.get('/api/salads/:id', async (req: Request, res: Response) => {
   try {
     const salad = await Salad.findById(req.params.id);
     if (!salad) {
-      return res.status(404).json({ error: 'Ensalada no encontrada' });
+      return res.status(404).json({ success: false, error: 'Ensalada no encontrada' });
     }
-    res.json(salad);
+    return res.json(salad);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener la ensalada' });
+    return res.status(500).json({ success: false, error: 'Error al obtener la ensalada' });
   }
 });
 
-// POST - Crear una nueva orden
 app.post('/api/orders', async (req: Request, res: Response) => {
   try {
     const ordenData = req.body;
-    
-    // Generar número de orden
     const count = await Order.countDocuments();
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const numero = (count + 1).toString().padStart(4, '0');
-    const numeroOrden = `ORD-${year}${month}${day}-${numero}`;
+    const numeroOrden = generarNumeroOrden(count);
+    const estadoInicial = EstadoPago.PENDIENTE;
+    const isPse = ordenData?.metodoPago === 'PSE';
+    const urlPago = isPse ? generarUrlPagoSimulada(numeroOrden, Number(ordenData?.total || 0)) : undefined;
 
     const orden = new Order({
       ...ordenData,
       numeroOrden,
+      estadoPago: ordenData?.estadoPago || estadoInicial,
+      ...(urlPago ? { urlPago } : {}),
     });
 
     await orden.save();
-    res.status(201).json(orden);
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        ordenId: orden._id,
+        numeroOrden: orden.numeroOrden,
+        estadoPago: orden.estadoPago,
+        metodoPago: orden.metodoPago,
+        total: orden.total,
+        ...(urlPago ? { urlPago } : {}),
+        mensaje: isPse
+          ? 'Orden creada. Por favor complete el pago en la URL proporcionada.'
+          : 'Orden creada exitosamente. El pago se realizara en efectivo al momento de la entrega.',
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear la orden' });
+    return res.status(500).json({ success: false, error: 'Error al crear la orden' });
   }
 });
 
-// GET - Obtener todas las órdenes
 app.get('/api/orders', async (req: Request, res: Response) => {
   try {
-    const orders = await Order.find().sort({ fechaCreacion: -1 });
-    res.json(orders);
+    const filtroFecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
+    let createdAtFilter: Date | undefined;
+
+    if (filtroFecha === 'hoy') {
+      const now = new Date();
+      createdAtFilter = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    }
+
+    const query = createdAtFilter ? { createdAt: { $gte: createdAtFilter } } : {};
+
+    const rawOrders = await Order.find(query)
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    const ordenes = rawOrders.map((order) => normalizeOrder(order));
+
+    const totalRecaudado = ordenes
+      .filter((o) => o.estadoPago === EstadoPago.PAGADO)
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+
+    const totalPendiente = ordenes
+      .filter((o) => o.estadoPago === EstadoPago.PENDIENTE)
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+
+    return res.json({
+      success: true,
+      data: {
+        ordenes,
+        stats: {
+          totalOrdenes: ordenes.length,
+          totalRecaudado,
+          totalPendiente,
+        },
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener las órdenes' });
+    return res.status(500).json({ success: false, error: 'Error al obtener las ordenes' });
   }
 });
 
-// GET - Obtener una orden por número
 app.get('/api/orders/:numeroOrden', async (req: Request, res: Response) => {
   try {
-    const orden = await Order.findOne({ numeroOrden: req.params.numeroOrden });
+    const orden = await Order.findOne({ numeroOrden: req.params.numeroOrden }).lean();
     if (!orden) {
-      return res.status(404).json({ error: 'Orden no encontrada' });
+      return res.status(404).json({ success: false, error: 'Orden no encontrada' });
     }
-    res.json(orden);
+    return res.json({ success: true, data: normalizeOrder(orden) });
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener la orden' });
+    return res.status(500).json({ success: false, error: 'Error al obtener la orden' });
   }
 });
 
-// PATCH - Actualizar estado de una orden
+app.patch('/api/orders', async (req: Request, res: Response) => {
+  try {
+    const { ordenId, nuevoEstado } = req.body as { ordenId?: string; nuevoEstado?: string };
+    if (!ordenId || !nuevoEstado) {
+      return res.status(400).json({ success: false, error: 'Se requiere ordenId y nuevoEstado' });
+    }
+
+    const orden = await Order.findByIdAndUpdate(
+      ordenId,
+      { estadoOrden: nuevoEstado },
+      { new: true }
+    ).lean();
+
+    if (!orden) {
+      return res.status(404).json({ success: false, error: 'Orden no encontrada' });
+    }
+
+    return res.json({ success: true, data: normalizeOrder(orden) });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Error al actualizar la orden' });
+  }
+});
+
 app.patch('/api/orders/:numeroOrden/estado', async (req: Request, res: Response) => {
   try {
     const { estadoOrden } = req.body;
@@ -115,19 +217,18 @@ app.patch('/api/orders/:numeroOrden/estado', async (req: Request, res: Response)
       { numeroOrden: req.params.numeroOrden },
       { estadoOrden },
       { new: true }
-    );
-    
+    ).lean();
+
     if (!orden) {
-      return res.status(404).json({ error: 'Orden no encontrada' });
+      return res.status(404).json({ success: false, error: 'Orden no encontrada' });
     }
-    
-    res.json(orden);
+
+    return res.json({ success: true, data: normalizeOrder(orden) });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el estado' });
+    return res.status(500).json({ success: false, error: 'Error al actualizar el estado' });
   }
 });
 
-// PATCH - Actualizar estado de pago de una orden
 app.patch('/api/orders/:numeroOrden/pago', async (req: Request, res: Response) => {
   try {
     const { estadoPago } = req.body;
@@ -135,28 +236,25 @@ app.patch('/api/orders/:numeroOrden/pago', async (req: Request, res: Response) =
       { numeroOrden: req.params.numeroOrden },
       { estadoPago },
       { new: true }
-    );
-    
+    ).lean();
+
     if (!orden) {
-      return res.status(404).json({ error: 'Orden no encontrada' });
+      return res.status(404).json({ success: false, error: 'Orden no encontrada' });
     }
-    
-    res.json(orden);
+
+    return res.json({ success: true, data: normalizeOrder(orden) });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el pago' });
+    return res.status(500).json({ success: false, error: 'Error al actualizar el pago' });
   }
 });
 
-// Middleware para manejo de errores
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Error interno del servidor' });
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('Error:', err.message);
+  res.status(500).json({ success: false, error: 'Error interno del servidor' });
 });
 
-// Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
 
-// Exportar para testing
 export { app };

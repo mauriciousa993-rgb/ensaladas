@@ -251,7 +251,6 @@ const OrderSchema = new Schema<IOrder>(
 );
 
 // Índices
-OrderSchema.index({ numeroOrden: 1 });
 OrderSchema.index({ 'cliente.celular': 1 });
 OrderSchema.index({ estadoOrden: 1 });
 OrderSchema.index({ estadoPago: 1 });

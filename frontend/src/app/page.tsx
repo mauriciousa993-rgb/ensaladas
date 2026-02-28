@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import SaladCustomizer from '@/components/SaladCustomizer';
 import Checkout from '@/components/Checkout';
 import { useCartStore } from '@/store/cartStore';
@@ -8,7 +9,7 @@ import { useCartStore } from '@/store/cartStore';
 // Datos de ejemplo de ensaladas (en producción vendrían de la API)
 const SALADS_EJEMPLO = [
   {
-    _id: '1',
+    _id: '65f100000000000000000001',
     nombre: 'Ensalada César',
     precioBase: 15000,
     ingredientesDefault: ['lechuga', 'tomate', 'queso parmesan', 'crutones', 'aderezo César'],
@@ -16,7 +17,7 @@ const SALADS_EJEMPLO = [
     descripcion: 'La clásica ensalada César con nuestro aderezo secreto',
   },
   {
-    _id: '2',
+    _id: '65f100000000000000000002',
     nombre: 'Ensalada Mediterránea',
     precioBase: 14000,
     ingredientesDefault: ['lechuga', 'pepino', 'tomate', 'aceitunas', 'feta', 'cebolla'],
@@ -24,7 +25,7 @@ const SALADS_EJEMPLO = [
     descripcion: 'Frescos ingredientes del mediterráneo',
   },
   {
-    _id: '3',
+    _id: '65f100000000000000000003',
     nombre: 'Ensalada Verde',
     precioBase: 12000,
     ingredientesDefault: ['espinaca', 'rucola', 'aguacate', 'manzana verde', 'nueces'],
@@ -189,9 +190,12 @@ export default function Home() {
             >
               {/* Imagen */}
               <div className="relative h-48 bg-gray-200 overflow-hidden">
-                <img
+                <Image
                   src={salad.imagenUrl}
                   alt={salad.nombre}
+                  fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  loading="lazy"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />

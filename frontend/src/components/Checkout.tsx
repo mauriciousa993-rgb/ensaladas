@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useCartStore } from '@/store/cartStore';
+import { buildApiUrl } from '@/lib/api';
 
 interface CheckoutProps {
   onClose?: () => void;
@@ -155,7 +156,7 @@ export default function Checkout({ onClose, onSuccess }: CheckoutProps) {
         metodoPago: formData.metodoPago,
       };
 
-      const response = await fetch('/api/orders', {
+      const response = await fetch(buildApiUrl('/api/orders'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

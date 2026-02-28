@@ -74,6 +74,7 @@ export interface IOrder extends Document {
   metodoPago: MetodoPago;
   estadoPago: EstadoPago;
   estadoOrden: EstadoOrden;
+  urlPago?: string;
   notas?: string;
   fechaCreacion: Date;
   fechaActualizacion: Date;
@@ -248,6 +249,10 @@ const OrderSchema = new Schema<IOrder>(
       enum: Object.values(EstadoOrden),
       default: EstadoOrden.RECIBIDA,
     },
+    urlPago: {
+      type: String,
+      trim: true,
+    },
     notas: {
       type: String,
       trim: true,
@@ -263,6 +268,6 @@ const OrderSchema = new Schema<IOrder>(
 OrderSchema.index({ 'cliente.celular': 1 });
 OrderSchema.index({ estadoOrden: 1 });
 OrderSchema.index({ estadoPago: 1 });
-OrderSchema.index({ fechaCreacion: -1 });
+OrderSchema.index({ createdAt: -1 });
 
-export const Order = mongoose.model<IOrder>('Order', OrderSchema);
+export const Order = mongoose.models.Order || mongoose.model<IOrder>('Order', OrderSchema);

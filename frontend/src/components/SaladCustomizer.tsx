@@ -27,6 +27,7 @@ const PROTEINAS = [
 export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps) {
   // Estado para los ingredientes removidos
   const [ingredientesRemovidos, setIngredientesRemovidos] = useState<string[]>([]);
+  const [ingredientesRemovidosDraft, setIngredientesRemovidosDraft] = useState<string[]>([]);
   
   // Estado para la proteína extra seleccionada
   const [proteinaExtra, setProteinaExtra] = useState<string | null>(null);
@@ -52,13 +53,26 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
     return salad.precioBase + precioProteina;
   }, [salad.precioBase, precioProteina]);
 
+  const hayCambiosIngredientes = useMemo(() => {
+    if (ingredientesRemovidos.length !== ingredientesRemovidosDraft.length) return true;
+    return ingredientesRemovidos.some((ingrediente) => !ingredientesRemovidosDraft.includes(ingrediente));
+  }, [ingredientesRemovidos, ingredientesRemovidosDraft]);
+
   // Toggle ingrediente removido
   const toggleIngrediente = (ingrediente: string) => {
-    setIngredientesRemovidos((prev) =>
+    setIngredientesRemovidosDraft((prev) =>
       prev.includes(ingrediente)
         ? prev.filter((i) => i !== ingrediente)
         : [...prev, ingrediente]
     );
+  };
+
+  const handleGuardarIngredientes = () => {
+    setIngredientesRemovidos([...ingredientesRemovidosDraft]);
+  };
+
+  const handleCancelarIngredientes = () => {
+    setIngredientesRemovidosDraft([...ingredientesRemovidos]);
   };
 
   // Manejar agregar al carrito
@@ -81,6 +95,7 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
 
     // Resetear estado local
     setIngredientesRemovidos([]);
+    setIngredientesRemovidosDraft([]);
     setProteinaExtra(null);
     setObservaciones('');
     setCantidad(1);
@@ -167,7 +182,7 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
                   className={`
                     flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all
                     ${
-                      ingredientesRemovidos.includes(ingrediente)
+                      ingredientesRemovidosDraft.includes(ingrediente)
                         ? 'bg-red-50 border-2 border-red-200 text-red-600'
                         : 'bg-green-50 border-2 border-green-200 text-green-700 hover:border-green-400'
                     }
@@ -175,7 +190,7 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
                 >
                   <input
                     type="checkbox"
-                    checked={!ingredientesRemovidos.includes(ingrediente)}
+                    checked={!ingredientesRemovidosDraft.includes(ingrediente)}
                     onChange={() => toggleIngrediente(ingrediente)}
                     className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
                   />
@@ -185,6 +200,29 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
                 </label>
               ))}
             </div>
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={handleGuardarIngredientes}
+                disabled={!hayCambiosIngredientes}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed transition-colors"
+              >
+                Guardar cambios
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelarIngredientes}
+                disabled={!hayCambiosIngredientes}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+            {hayCambiosIngredientes && (
+              <p className="mt-2 text-xs text-amber-600">
+                Tienes cambios de ingredientes sin guardar.
+              </p>
+            )}
           </div>
 
           {/* Sección: Agregar proteína */}
@@ -293,7 +331,8 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
           {/* Botón agregar al carrito */}
           <button
             onClick={handleAgregarAlCarrito}
-            className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-lg transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+            disabled={hayCambiosIngredientes}
+            className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed text-white font-bold rounded-lg text-lg transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -311,6 +350,11 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
             </svg>
             Agregar al carrito
           </button>
+          {hayCambiosIngredientes && (
+            <p className="text-center text-xs text-amber-600 mt-2">
+              Guarda o cancela los ingredientes para continuar.
+            </p>
+          )}
 
           {/* Items en el carrito (contador) */}
           {items.length > 0 && (

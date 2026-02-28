@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { buildApiUrl } from '@/lib/api';
 
 interface Order {
   _id: string;
@@ -55,8 +56,8 @@ export default function AdminDashboard() {
     setLoading(true);
     try {
       const url = filtroHoy 
-        ? '/api/orders?fecha=hoy' 
-        : '/api/orders';
+        ? buildApiUrl('/api/orders?fecha=hoy')
+        : buildApiUrl('/api/orders');
       
       const response = await fetch(url);
       const result = await response.json();
@@ -79,7 +80,7 @@ export default function AdminDashboard() {
   // Actualizar estado de orden
   const actualizarEstado = async (ordenId: string, nuevoEstado: string) => {
     try {
-      const response = await fetch('/api/orders', {
+      const response = await fetch(buildApiUrl('/api/orders'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ordenId, nuevoEstado }),
