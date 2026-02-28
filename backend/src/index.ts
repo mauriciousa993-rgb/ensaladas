@@ -1,4 +1,4 @@
-﻿import express, { Request, Response, NextFunction } from 'express';
+﻿﻿import express, { Request, Response, NextFunction } from 'express';
 import cors, { CorsOptions } from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './config/database';
@@ -92,6 +92,233 @@ app.get('/api/salads/:id', async (req: Request, res: Response) => {
     return res.json(salad);
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Error al obtener la ensalada' });
+  }
+});
+
+// Crear nueva ensalada
+app.post('/api/salads', async (req: Request, res: Response) => {
+  try {
+    const { nombre, precioBase, ingredientesDefault, imagenUrl, descripcion } = req.body;
+    
+    const salad = new Salad({
+      nombre,
+      precioBase,
+      ingredientesDefault: ingredientesDefault || [],
+      imagenUrl,
+      descripcion,
+      estaActiva: true,
+    });
+    
+    await salad.save();
+    return res.status(201).json({ success: true, data: salad });
+  } catch (error: any) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    return res.status(500).json({ success: false, error: 'Error al crear la ensalada' });
+  }
+});
+
+// Actualizar ensalada
+app.put('/api/salads/:id', async (req: Request, res: Response) => {
+  try {
+    const { nombre, precioBase, ingredientesDefault, imagenUrl, descripcion, estaActiva } = req.body;
+    
+    const salad = await Salad.findByIdAndUpdate(
+      req.params.id,
+      {
+        nombre,
+        precioBase,
+        ingredientesDefault,
+        imagenUrl,
+        descripcion,
+        estaActiva,
+      },
+      { new: true, runValidators: true }
+    );
+    
+    if (!salad) {
+      return res.status(404).json({ success: false, error: 'Ensalada no encontrada' });
+    }
+    
+    return res.json({ success: true, data: salad });
+  } catch (error: any) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    return res.status(500).json({ success: false, error: 'Error al actualizar la ensalada' });
+  }
+});
+
+// Eliminar ensalada (soft delete)
+app.delete('/api/salads/:id', async (req: Request, res: Response) => {
+  try {
+    const salad = await Salad.findByIdAndUpdate(
+      req.params.id,
+      { estaActiva: false },
+      { new: true }
+    );
+    
+    if (!salad) {
+      return res.status(404).json({ success: false, error: 'Ensalada no encontrada' });
+    }
+    
+    return res.json({ success: true, message: 'Ensalada eliminada correctamente' });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Error al eliminar la ensalada' });
+  }
+});
+
+// Reportes de ventas
+app.get('/api/reports/sales', async (req: Request, res: Response) => {
+  try {
+    const { desde, hasta } = req.query;
+    
+    let dateFilter: any = {};
+    if (desde && hasta) {
+      dateFilter = {
+        createdAt: {
+          $gte: new Date(desde as string),
+          $lte: new Date(hasta as string),
+        },
+      };
+    }
+    
+    const orders = await Order.find(dateFilter).lean();
+    
+    const salesByDate: any = {};
+    const salesByPaymentMethod: any = { Efectivo: 0, PSE: 0 };
+    let totalRevenue = 0;
+    let totalOrders = 0;
+    
+    orders.forEach((order: any) => {
+      const date = new Date(order.createdAt).toISOString().split('T')[0];
+      if (!salesByDate[date]) {
+        salesByDate[date] = { revenue: 0, orders: 0 };
+      }
+      salesByDate[date].revenue += order.total;
+      salesByDate[date].orders += 1;
+      
+      salesByPaymentMethod[order.metodoPago] += order.total;
+      totalRevenue += order.total;
+      totalOrders += 1;
+    });
+    
+    const dailySales = Object.entries(salesByDate).map(([date, data]: [string, any]) => ({
+      date,
+      revenue: data.revenue,
+      orders: data.orders,
+    })).sort((a, b) => a.date.localeCompare(b.date));
+    
+    return res.json({
+      success: true,
+      data: {
+        dailySales,
+        salesByPaymentMethod,
+        totalRevenue,
+        totalOrders,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Error al generar reporte de ventas' });
+  }
+});
+
+// Reportes de productos
+app.get('/api/reports/products', async (req: Request, res: Response) => {
+  try {
+    const { desde, hasta } = req.query;
+    
+    let dateFilter: any = {};
+    if (desde && hasta) {
+      dateFilter = {
+        createdAt: {
+          $gte: new Date(desde as string),
+          $lte: new Date(hasta as string),
+        },
+      };
+    }
+    
+    const orders = await Order.find(dateFilter).lean();
+    
+    const productStats: any = {};
+    
+    orders.forEach((order: any) => {
+      order.ensaldas.forEach((item: any) => {
+        const name = item.nombreSalad;
+        if (!productStats[name]) {
+          productStats[name] = {
+            name,
+            quantity: 0,
+            revenue: 0,
+            withProtein: 0,
+          };
+        }
+        productStats[name].quantity += 1;
+        productStats[name].revenue += item.precioTotal;
+        if (item.proteinaExtra) {
+          productStats[name].withProtein += 1;
+        }
+      });
+    });
+    
+    const topProducts = Object.values(productStats)
+      .sort((a: any, b: any) => b.revenue - a.revenue)
+      .slice(0, 10);
+    
+    return res.json({
+      success: true,
+      data: {
+        topProducts,
+        totalProductsSold: Object.values(productStats).reduce((sum: number, p: any) => sum + p.quantity, 0),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Error al generar reporte de productos' });
+  }
+});
+
+// Resumen del negocio
+app.get('/api/reports/summary', async (req: Request, res: Response) => {
+  try {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    const [todayOrders, weekOrders, monthOrders, allOrders, activeSalads] = await Promise.all([
+      Order.find({ createdAt: { $gte: startOfDay } }).lean(),
+      Order.find({ createdAt: { $gte: startOfWeek } }).lean(),
+      Order.find({ createdAt: { $gte: startOfMonth } }).lean(),
+      Order.find().lean(),
+      Salad.countDocuments({ estaActiva: true }),
+    ]);
+    
+    const calculateStats = (orders: any[]) => ({
+      orders: orders.length,
+      revenue: orders.reduce((sum, o) => sum + (o.estadoPago === EstadoPago.PAGADO ? o.total : 0), 0),
+      pending: orders.reduce((sum, o) => sum + (o.estadoPago === EstadoPago.PENDIENTE ? o.total : 0), 0),
+    });
+    
+    const statusCounts: any = {};
+    allOrders.forEach((o: any) => {
+      statusCounts[o.estadoOrden] = (statusCounts[o.estadoOrden] || 0) + 1;
+    });
+    
+    return res.json({
+      success: true,
+      data: {
+        today: calculateStats(todayOrders),
+        week: calculateStats(weekOrders),
+        month: calculateStats(monthOrders),
+        allTime: calculateStats(allOrders),
+        statusDistribution: statusCounts,
+        activeProducts: activeSalads,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Error al generar resumen' });
   }
 });
 

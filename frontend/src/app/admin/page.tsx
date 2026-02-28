@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { buildApiUrl } from '@/lib/api';
+import SaladManager from '@/components/admin/SaladManager';
+import SaladForm from '@/components/admin/SaladForm';
+import ReportsPanel from '@/components/admin/ReportsPanel';
+
 
 interface Order {
   _id: string;
@@ -45,11 +49,19 @@ const ESTADOS_ORDEN = [
   { valor: 'entregada', label: 'Entregado', color: 'bg-green-100 text-green-800' },
 ];
 
+type TabType = 'ordenes' | 'ensaladas' | 'informes';
+
 export default function AdminDashboard() {
+  const [activeTab, setActiveTab] = useState<TabType>('ordenes');
   const [ordenes, setOrdenes] = useState<Order[]>([]);
   const [stats, setStats] = useState<Stats>({ totalOrdenes: 0, totalRecaudado: 0, totalPendiente: 0 });
   const [loading, setLoading] = useState(true);
   const [filtroHoy, setFiltroHoy] = useState(false);
+  
+  // Estados para el modal de ensaladas
+  const [showSaladForm, setShowSaladForm] = useState(false);
+  const [editingSalad, setEditingSalad] = useState<any>(null);
+  const [saladRefreshTrigger, setSaladRefreshTrigger] = useState(0);
 
   // Cargar órdenes
   const cargarOrdenes = async () => {
@@ -89,7 +101,6 @@ export default function AdminDashboard() {
       const result = await response.json();
       
       if (result.success) {
-        // Actualizar el estado local
         setOrdenes(ordenes.map(o => 
           o._id === ordenId ? { ...o, estadoOrden: nuevoEstado } : o
         ));
@@ -124,6 +135,226 @@ export default function AdminDashboard() {
     });
   };
 
+  // Handlers para ensaladas
+  const handleCreateSalad = () => {
+    setEditingSalad(null);
+    setShowSaladForm(true);
+  };
+
+  const handleEditSalad = (salad: any) => {
+    setEditingSalad(salad);
+    setShowSaladForm(true);
+  };
+
+  const handleSaladSuccess = () => {
+    setSaladRefreshTrigger(prev => prev + 1);
+  };
+
+  const handleCloseSaladForm = () => {
+    setShowSaladForm(false);
+    setEditingSalad(null);
+  };
+
+  // Renderizar contenido según tab activo
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'ordenes':
+        return (
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white rounded-xl shadow p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-500 text-sm">Total de Órdenes</p>
+                    <p className="text-3xl font-bold text-gray-800">{stats.totalOrdenes}</p>
+                  </div>
+                  <div className="bg-blue-100 p-4 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-500 text-sm">Total Recaudado (PSE)</p>
+                    <p className="text-3xl font-bold text-green-600">${stats.totalRecaudado.toLocaleString('es-CO')}</p>
+                  </div>
+                  <div className="bg-green-100 p-4 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-500 text-sm">Pendiente (Efectivo)</p>
+                    <p className="text-3xl font-bold text-orange-600">${stats.totalPendiente.toLocaleString('es-CO')}</p>
+                  </div>
+                  <div className="bg-orange-100 p-4 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filtro */}
+            <div className="bg-white rounded-xl shadow p-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filtroHoy}
+                  onChange={(e) => setFiltroHoy(e.target.checked)}
+                  className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+                />
+                <span className="font-medium text-gray-700">Mostrar solo ventas de hoy</span>
+              </label>
+            </div>
+
+            {/* Tabla de órdenes */}
+            <div className="bg-white rounded-xl shadow overflow-hidden">
+              {loading ? (
+                <div className="p-8 text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+                  <p className="mt-4 text-gray-500">Cargando órdenes...</p>
+                </div>
+              ) : ordenes.length === 0 ? (
+                <div className="p-8 text-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <p className="text-gray-500">No hay órdenes</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orden</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrega</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detalle</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pago</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hora</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {ordenes.map((orden) => (
+                        <tr key={orden._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="font-medium text-gray-900">#{orden.numeroOrden}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">{orden.cliente.nombre}</div>
+                            <div className="text-sm text-gray-500">{orden.cliente.celular}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-900">
+                              {orden.tipoEntrega === 'domicilio' ? '📍 Domicilio' : '🏪 Tienda'}
+                            </div>
+                            {orden.direccion && (
+                              <div className="text-xs text-gray-500">
+                                {orden.direccion.calle} #{orden.direccion.numero}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            {orden.ensaldas.map((item, idx) => (
+                              <div key={idx} className="text-sm">
+                                <span className="font-medium">{item.nombreSalad}</span>
+                                {item.proteinaExtra && (
+                                  <span className="text-green-600"> +{item.proteinaExtra}</span>
+                                )}
+                                {item.ingredientesRemovidos.length > 0 && (
+                                  <div className="text-xs text-red-500">
+                                    Sin: {item.ingredientesRemovidos.join(', ')}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-lg font-bold text-green-600">
+                              ${orden.total.toLocaleString('es-CO')}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              orden.metodoPago === 'PSE' 
+                                ? 'bg-blue-100 text-blue-800' 
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {orden.metodoPago}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getColorEstado(orden.estadoOrden)}`}>
+                              {ESTADOS_ORDEN.find(e => e.valor === orden.estadoOrden)?.label || orden.estadoOrden}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatearFecha(orden.fechaCreacion)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {getSiguienteEstado(orden.estadoOrden) && (
+                              <button
+                                onClick={() => actualizarEstado(orden._id, getSiguienteEstado(orden.estadoOrden)!)}
+                                className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                              >
+                                Avanzar →
+                              </button>
+                            )}
+                            {!getSiguienteEstado(orden.estadoOrden) && (
+                              <span className="text-gray-400 text-sm">✓ Completado</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      
+      case 'ensaladas':
+        return (
+          <div>
+            <SaladManager 
+              onEdit={handleEditSalad}
+              onCreate={handleCreateSalad}
+              refreshTrigger={saladRefreshTrigger}
+            />
+            {showSaladForm && (
+              <SaladForm
+                salad={editingSalad}
+                onClose={handleCloseSaladForm}
+                onSuccess={handleSaladSuccess}
+              />
+            )}
+          </div>
+        );
+      
+      case 'informes':
+        return <ReportsPanel />;
+      
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -144,172 +375,35 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm">Total de Órdenes</p>
-                <p className="text-3xl font-bold text-gray-800">{stats.totalOrdenes}</p>
-              </div>
-              <div className="bg-blue-100 p-4 rounded-full">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm">Total Recaudado (PSE)</p>
-                <p className="text-3xl font-bold text-green-600">${stats.totalRecaudado.toLocaleString('es-CO')}</p>
-              </div>
-              <div className="bg-green-100 p-4 rounded-full">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm">Pendiente (Efectivo)</p>
-                <p className="text-3xl font-bold text-orange-600">${stats.totalPendiente.toLocaleString('es-CO')}</p>
-              </div>
-              <div className="bg-orange-100 p-4 rounded-full">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
+      {/* Navigation Tabs */}
+      <div className="max-w-7xl mx-auto px-6 pt-6">
+        <div className="bg-white rounded-xl shadow mb-6">
+          <div className="flex flex-wrap">
+            {[
+              { id: 'ordenes', label: '📋 Órdenes', description: 'Gestiona los pedidos' },
+              { id: 'ensaladas', label: '🥗 Ensaladas', description: 'Edita productos' },
+              { id: 'informes', label: '📈 Informes', description: 'Reportes y análisis' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as TabType)}
+                className={`flex-1 min-w-[200px] p-4 text-left transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-green-50 border-b-2 border-green-500'
+                    : 'hover:bg-gray-50 border-b-2 border-transparent'
+                }`}
+              >
+                <div className={`font-semibold ${activeTab === tab.id ? 'text-green-700' : 'text-gray-700'}`}>
+                  {tab.label}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">{tab.description}</div>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Filtro */}
-        <div className="bg-white rounded-xl shadow p-4 mb-6">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={filtroHoy}
-              onChange={(e) => setFiltroHoy(e.target.checked)}
-              className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
-            />
-            <span className="font-medium text-gray-700">Mostrar solo ventas de hoy</span>
-          </label>
-        </div>
-
-        {/* Tabla de órdenes */}
-        <div className="bg-white rounded-xl shadow overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-              <p className="mt-4 text-gray-500">Cargando órdenes...</p>
-            </div>
-          ) : ordenes.length === 0 ? (
-            <div className="p-8 text-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              <p className="text-gray-500">No hay órdenes</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orden</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrega</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detalle</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pago</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hora</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {ordenes.map((orden) => (
-                    <tr key={orden._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-medium text-gray-900">#{orden.numeroOrden}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{orden.cliente.nombre}</div>
-                        <div className="text-sm text-gray-500">{orden.cliente.celular}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">
-                          {orden.tipoEntrega === 'domicilio' ? '📍 Domicilio' : '🏪 Tienda'}
-                        </div>
-                        {orden.direccion && (
-                          <div className="text-xs text-gray-500">
-                            {orden.direccion.calle} #{orden.direccion.numero}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {orden.ensaldas.map((item, idx) => (
-                          <div key={idx} className="text-sm">
-                            <span className="font-medium">{item.nombreSalad}</span>
-                            {item.proteinaExtra && (
-                              <span className="text-green-600"> +{item.proteinaExtra}</span>
-                            )}
-                            {item.ingredientesRemovidos.length > 0 && (
-                              <div className="text-xs text-red-500">
-                                Sin: {item.ingredientesRemovidos.join(', ')}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-lg font-bold text-green-600">
-                          ${orden.total.toLocaleString('es-CO')}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          orden.metodoPago === 'PSE' 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {orden.metodoPago}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getColorEstado(orden.estadoOrden)}`}>
-                          {ESTADOS_ORDEN.find(e => e.valor === orden.estadoOrden)?.label || orden.estadoOrden}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatearFecha(orden.fechaCreacion)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getSiguienteEstado(orden.estadoOrden) && (
-                          <button
-                            onClick={() => actualizarEstado(orden._id, getSiguienteEstado(orden.estadoOrden)!)}
-                            className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
-                          >
-                            Avanzar →
-                          </button>
-                        )}
-                        {!getSiguienteEstado(orden.estadoOrden) && (
-                          <span className="text-gray-400 text-sm">✓ Completado</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {/* Content */}
+        {renderContent()}
       </div>
     </div>
   );
