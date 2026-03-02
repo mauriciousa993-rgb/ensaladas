@@ -1,69 +1,62 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useCartStore, CartItem } from '@/store/cartStore';
 
-// Tipos para las props del componente
+interface ProteinOption {
+  nombre: string;
+  precio: number;
+}
+
 interface SaladCustomizerProps {
   salad: {
     _id: string;
     nombre: string;
     precioBase: number;
     ingredientesDefault: string[];
+    proteinasExtras?: ProteinOption[];
     imagenUrl: string;
     descripcion?: string;
   };
   onClose?: () => void;
 }
 
-// Precios de proteínas adicionales
-const PROTEINAS = [
+const DEFAULT_PROTEINAS: ProteinOption[] = [
   { nombre: 'Pollo', precio: 5000 },
-  { nombre: 'Atún', precio: 6000 },
+  { nombre: 'Atun', precio: 6000 },
   { nombre: 'Huevo', precio: 3500 },
 ];
 
 export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps) {
-  // Estado para los ingredientes removidos
   const [ingredientesRemovidos, setIngredientesRemovidos] = useState<string[]>([]);
   const [ingredientesRemovidosDraft, setIngredientesRemovidosDraft] = useState<string[]>([]);
-  
-  // Estado para la proteína extra seleccionada
   const [proteinaExtra, setProteinaExtra] = useState<string | null>(null);
-  
-  // Estado para observaciones
-  const [observaciones, setObservaciones] = useState('');
-  
-  // Estado para cantidad
   const [cantidad, setCantidad] = useState(1);
-  
-  // Obtener funciones del store
+
   const agregarItem = useCartStore((state) => state.agregarItem);
   const items = useCartStore((state) => state.items);
 
-  // Calcular el precio total
+  const proteinasDisponibles = salad.proteinasExtras?.length
+    ? salad.proteinasExtras
+    : DEFAULT_PROTEINAS;
+
   const precioProteina = useMemo(() => {
     if (!proteinaExtra) return 0;
-    const proteina = PROTEINAS.find((p) => p.nombre === proteinaExtra);
+    const proteina = proteinasDisponibles.find((p) => p.nombre === proteinaExtra);
     return proteina?.precio || 0;
-  }, [proteinaExtra]);
+  }, [proteinaExtra, proteinasDisponibles]);
 
-  const precioTotal = useMemo(() => {
-    return salad.precioBase + precioProteina;
-  }, [salad.precioBase, precioProteina]);
+  const precioTotal = useMemo(() => salad.precioBase + precioProteina, [salad.precioBase, precioProteina]);
 
   const hayCambiosIngredientes = useMemo(() => {
     if (ingredientesRemovidos.length !== ingredientesRemovidosDraft.length) return true;
     return ingredientesRemovidos.some((ingrediente) => !ingredientesRemovidosDraft.includes(ingrediente));
   }, [ingredientesRemovidos, ingredientesRemovidosDraft]);
 
-  // Toggle ingrediente removido
   const toggleIngrediente = (ingrediente: string) => {
     setIngredientesRemovidosDraft((prev) =>
-      prev.includes(ingrediente)
-        ? prev.filter((i) => i !== ingrediente)
-        : [...prev, ingrediente]
+      prev.includes(ingrediente) ? prev.filter((i) => i !== ingrediente) : [...prev, ingrediente]
     );
   };
 
@@ -75,7 +68,6 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
     setIngredientesRemovidosDraft([...ingredientesRemovidos]);
   };
 
-  // Manejar agregar al carrito
   const handleAgregarAlCarrito = () => {
     const item: Omit<CartItem, 'id' | 'cantidad'> = {
       saladId: salad._id,
@@ -88,92 +80,44 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
       precioTotal,
     };
 
-    // Agregar la cantidad especificada
     for (let i = 0; i < cantidad; i++) {
       agregarItem(item);
     }
 
-    // Resetear estado local
     setIngredientesRemovidos([]);
     setIngredientesRemovidosDraft([]);
     setProteinaExtra(null);
-    setObservaciones('');
     setCantidad(1);
 
-    // Cerrar si hay función onClose
-    if (onClose) {
-      onClose();
-    }
+    if (onClose) onClose();
   };
 
   return (
     <div className="bg-white rounded-xl shadow-xl overflow-hidden w-[95vw] max-w-2xl mx-auto max-h-[90vh] flex flex-col">
-      {/* Header con imagen */}
       <div className="relative h-32 sm:h-40 bg-gray-100 flex-shrink-0">
-        <Image
-          src={salad.imagenUrl}
-          alt={salad.nombre}
-          fill
-          className="object-cover"
-        />
+        <Image src={salad.imagenUrl} alt={salad.nombre} fill className="object-cover" />
         {onClose && (
           <button
             onClick={onClose}
             className="absolute top-3 right-3 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg transition-colors"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 text-gray-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         )}
-        {/* Overlay con nombre y precio */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
-          <h2 className="text-xl sm:text-2xl font-bold text-white">
-            {salad.nombre}
-          </h2>
-          <p className="text-lg font-bold text-green-400">
-            ${salad.precioBase.toLocaleString('es-CO')}
-          </p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white">{salad.nombre}</h2>
+          <p className="text-lg font-bold text-green-400">${salad.precioBase.toLocaleString('es-CO')}</p>
         </div>
       </div>
 
-      {/* Contenido scrolleable */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-        {salad.descripcion && (
-          <p className="text-gray-500 text-sm mb-4">{salad.descripcion}</p>
-        )}
+        {salad.descripcion && <p className="text-gray-500 text-sm mb-4">{salad.descripcion}</p>}
 
-        {/* Sección: Quitar ingredientes */}
         <div className="mb-5">
-          <h3 className="text-base font-semibold text-gray-700 mb-2 flex items-center gap-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-red-500"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Quitar ingredientes
-          </h3>
-          <p className="text-xs text-gray-500 mb-2">
-            Desmarca los ingredientes que NO quieres
-          </p>
+          <h3 className="text-base font-semibold text-gray-700 mb-2">Quitar ingredientes</h3>
+          <p className="text-xs text-gray-500 mb-2">Desmarca los ingredientes que NO quieres</p>
           <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
             {salad.ingredientesDefault.map((ingrediente) => (
               <label
@@ -193,9 +137,7 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
                   onChange={() => toggleIngrediente(ingrediente)}
                   className="w-3.5 h-3.5 rounded border-gray-300 text-green-600 focus:ring-green-500"
                 />
-                <span className="font-medium capitalize">
-                  {ingrediente}
-                </span>
+                <span className="font-medium capitalize">{ingrediente}</span>
               </label>
             ))}
           </div>
@@ -217,67 +159,36 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
               Cancelar
             </button>
           </div>
-          {hayCambiosIngredientes && (
-            <p className="mt-1.5 text-xs text-amber-600">
-              Tienes cambios sin guardar.
-            </p>
-          )}
+          {hayCambiosIngredientes && <p className="mt-1.5 text-xs text-amber-600">Tienes cambios sin guardar.</p>}
         </div>
 
-        {/* Sección: Agregar proteína */}
-        <div className="mb-5">
-          <h3 className="text-base font-semibold text-gray-700 mb-2 flex items-center gap-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-yellow-500"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Agregar proteína
-          </h3>
-          <div className="grid grid-cols-3 gap-2">
-            {PROTEINAS.map((proteina) => (
-              <button
-                key={proteina.nombre}
-                onClick={() =>
-                  setProteinaExtra(
-                    proteinaExtra === proteina.nombre ? null : proteina.nombre
-                  )
-                }
-                className={`
-                  flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-all
-                  ${
-                    proteinaExtra === proteina.nombre
-                      ? 'border-green-500 bg-green-50 text-green-700'
-                      : 'border-gray-200 hover:border-green-300 text-gray-600'
-                  }
-                `}
-              >
-                <span className="text-xl mb-0.5">
-                  {proteina.nombre === 'Pollo' && '🍗'}
-                  {proteina.nombre === 'Atún' && '🐟'}
-                  {proteina.nombre === 'Huevo' && '🥚'}
-                </span>
-                <span className="text-xs font-medium">{proteina.nombre}</span>
-                <span className="text-xs text-gray-500">
-                  +${proteina.precio.toLocaleString('es-CO')}
-                </span>
-              </button>
-            ))}
+        {proteinasDisponibles.length > 0 && (
+          <div className="mb-5">
+            <h3 className="text-base font-semibold text-gray-700 mb-2">Agregar proteina</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {proteinasDisponibles.map((proteina) => (
+                <button
+                  key={proteina.nombre}
+                  onClick={() => setProteinaExtra(proteinaExtra === proteina.nombre ? null : proteina.nombre)}
+                  className={`
+                    flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-all
+                    ${
+                      proteinaExtra === proteina.nombre
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-200 hover:border-green-300 text-gray-600'
+                    }
+                  `}
+                >
+                  <span className="text-xs font-medium">{proteina.nombre}</span>
+                  <span className="text-xs text-gray-500">+${proteina.precio.toLocaleString('es-CO')}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Sección: Cantidad */}
         <div className="mb-5">
-          <h3 className="text-base font-semibold text-gray-700 mb-2">
-            Cantidad
-          </h3>
+          <h3 className="text-base font-semibold text-gray-700 mb-2">Cantidad</h3>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCantidad(Math.max(1, cantidad - 1))}
@@ -285,9 +196,7 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
             >
               -
             </button>
-            <span className="text-xl font-bold text-gray-800 w-10 text-center">
-              {cantidad}
-            </span>
+            <span className="text-xl font-bold text-gray-800 w-10 text-center">{cantidad}</span>
             <button
               onClick={() => setCantidad(cantidad + 1)}
               className="w-9 h-9 rounded-full bg-green-100 hover:bg-green-200 flex items-center justify-center text-lg font-bold text-green-600 transition-colors"
@@ -297,20 +206,15 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
           </div>
         </div>
 
-        {/* Resumen del precio */}
         <div className="bg-gray-50 rounded-lg p-3 mb-4">
           <div className="flex justify-between text-sm mb-1">
             <span className="text-gray-600">Base</span>
-            <span className="font-medium">
-              ${salad.precioBase.toLocaleString('es-CO')}
-            </span>
+            <span className="font-medium">${salad.precioBase.toLocaleString('es-CO')}</span>
           </div>
           {proteinaExtra && (
             <div className="flex justify-between text-sm mb-1">
               <span className="text-gray-600">{proteinaExtra}</span>
-              <span className="font-medium text-green-600">
-                +${precioProteina.toLocaleString('es-CO')}
-              </span>
+              <span className="font-medium text-green-600">+${precioProteina.toLocaleString('es-CO')}</span>
             </div>
           )}
           <div className="flex justify-between text-sm mb-1">
@@ -320,26 +224,17 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
           <div className="border-t border-gray-200 pt-2 mt-2">
             <div className="flex justify-between">
               <span className="font-semibold text-gray-800">Total</span>
-              <span className="text-lg font-bold text-green-600">
-                ${(precioTotal * cantidad).toLocaleString('es-CO')}
-              </span>
+              <span className="text-lg font-bold text-green-600">${(precioTotal * cantidad).toLocaleString('es-CO')}</span>
             </div>
           </div>
         </div>
 
-        {/* Botón agregar al carrito */}
         <button
           onClick={handleAgregarAlCarrito}
           disabled={hayCambiosIngredientes}
           className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed text-white font-bold rounded-lg text-base transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -349,17 +244,14 @@ export default function SaladCustomizer({ salad, onClose }: SaladCustomizerProps
           </svg>
           Agregar al carrito
         </button>
+
         {hayCambiosIngredientes && (
-          <p className="text-center text-xs text-amber-600 mt-2">
-            Guarda o cancela los ingredientes para continuar.
-          </p>
+          <p className="text-center text-xs text-amber-600 mt-2">Guarda o cancela los ingredientes para continuar.</p>
         )}
 
-        {/* Items en el carrito (contador) */}
         {items.length > 0 && (
           <p className="text-center text-sm text-gray-500 mt-3">
-            Tienes {items.length} {items.length === 1 ? 'ensalada' : 'ensaladas'} en
-            tu carrito
+            Tienes {items.length} {items.length === 1 ? 'ensalada' : 'ensaladas'} en tu carrito
           </p>
         )}
       </div>

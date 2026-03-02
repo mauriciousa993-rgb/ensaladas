@@ -32,12 +32,13 @@ export async function POST(request: NextRequest) {
     await dbConnect();
     
     const body = await request.json();
-    const { nombre, precioBase, ingredientesDefault, imagenUrl, descripcion } = body;
+    const { nombre, precioBase, ingredientesDefault, proteinasExtras, imagenUrl, descripcion } = body;
     
     const salad = await Salad.create({
       nombre,
       precioBase,
       ingredientesDefault: ingredientesDefault || [],
+      proteinasExtras,
       imagenUrl,
       descripcion,
       estaActiva: true,
@@ -71,7 +72,7 @@ export async function PUT(request: NextRequest) {
     await dbConnect();
     
     const body = await request.json();
-    const { id, nombre, precioBase, ingredientesDefault, imagenUrl, descripcion, estaActiva } = body;
+    const { id, nombre, precioBase, ingredientesDefault, proteinasExtras, imagenUrl, descripcion, estaActiva } = body;
     
     if (!id) {
       return NextResponse.json(
@@ -86,6 +87,7 @@ export async function PUT(request: NextRequest) {
         nombre,
         precioBase,
         ingredientesDefault,
+        proteinasExtras,
         imagenUrl,
         descripcion,
         estaActiva,

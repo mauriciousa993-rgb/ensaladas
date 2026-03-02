@@ -139,12 +139,13 @@ app.get('/api/salads/:id', async (req: Request, res: Response) => {
 // Crear nueva ensalada
 app.post('/api/salads', async (req: Request, res: Response) => {
   try {
-    const { nombre, precioBase, ingredientesDefault, imagenUrl, descripcion } = req.body;
+    const { nombre, precioBase, ingredientesDefault, proteinasExtras, imagenUrl, descripcion } = req.body;
     
     const salad = new Salad({
       nombre,
       precioBase,
       ingredientesDefault: ingredientesDefault || [],
+      proteinasExtras,
       imagenUrl,
       descripcion,
       estaActiva: true,
@@ -163,7 +164,7 @@ app.post('/api/salads', async (req: Request, res: Response) => {
 // Actualizar ensalada
 app.put('/api/salads/:id', async (req: Request, res: Response) => {
   try {
-    const { nombre, precioBase, ingredientesDefault, imagenUrl, descripcion, estaActiva } = req.body;
+    const { nombre, precioBase, ingredientesDefault, proteinasExtras, imagenUrl, descripcion, estaActiva } = req.body;
     
     const salad = await Salad.findByIdAndUpdate(
       req.params.id,
@@ -171,6 +172,7 @@ app.put('/api/salads/:id', async (req: Request, res: Response) => {
         nombre,
         precioBase,
         ingredientesDefault,
+        proteinasExtras,
         imagenUrl,
         descripcion,
         estaActiva,

@@ -30,10 +30,13 @@ export default function SaladManager({ onEdit, onCreate, refreshTrigger }: Salad
     setLoading(true);
     try {
       const response = await fetch(buildApiUrl('/api/salads?todas=true'));
-      const result = await response.json();
-      
-      if (result.success) {
-        setSalads(result.data);
+      const payload = await response.json();
+      const data = Array.isArray(payload) ? payload : payload?.data;
+
+      if (response.ok && Array.isArray(data)) {
+        setSalads(data);
+      } else {
+        console.error('Respuesta inesperada al cargar ensaladas:', payload);
       }
     } catch (error) {
       console.error('Error cargando ensaladas:', error);

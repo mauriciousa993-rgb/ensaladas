@@ -1,8 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { buildApiUrl } from '@/lib/api';
+
+interface ProteinOption {
+  nombre: string;
+  precio: number;
+}
 
 interface SaladFormProps {
   salad?: {
@@ -10,6 +15,7 @@ interface SaladFormProps {
     nombre: string;
     precioBase: number;
     ingredientesDefault: string[];
+    proteinasExtras?: ProteinOption[];
     imagenUrl: string;
     descripcion?: string;
     estaActiva: boolean;
@@ -18,19 +24,28 @@ interface SaladFormProps {
   onSuccess: () => void;
 }
 
+const DEFAULT_PROTEINAS: ProteinOption[] = [
+  { nombre: 'Pollo', precio: 5000 },
+  { nombre: 'Atun', precio: 6000 },
+  { nombre: 'Huevo', precio: 3500 },
+];
+
 export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps) {
   const isEditing = !!salad;
-  
+
   const [formData, setFormData] = useState({
     nombre: '',
     precioBase: 0,
     ingredientesDefault: [] as string[],
+    proteinasExtras: [...DEFAULT_PROTEINAS] as ProteinOption[],
     imagenUrl: '',
     descripcion: '',
     estaActiva: true,
   });
-  
+
   const [newIngredient, setNewIngredient] = useState('');
+  const [newProteinName, setNewProteinName] = useState('');
+  const [newProteinPrice, setNewProteinPrice] = useState('');
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -43,6 +58,10 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
         nombre: salad.nombre,
         precioBase: salad.precioBase,
         ingredientesDefault: [...salad.ingredientesDefault],
+        proteinasExtras:
+          salad.proteinasExtras && salad.proteinasExtras.length > 0
+            ? salad.proteinasExtras.map((p) => ({ nombre: p.nombre, precio: Number(p.precio) || 0 }))
+            : [...DEFAULT_PROTEINAS],
         imagenUrl: salad.imagenUrl,
         descripcion: salad.descripcion || '',
         estaActiva: salad.estaActiva,
@@ -52,25 +71,38 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
     }
   }, [salad]);
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.nombre.trim()) {
       newErrors.nombre = 'El nombre es requerido';
     }
-    
+
     if (formData.precioBase <= 0) {
       newErrors.precioBase = 'El precio debe ser mayor a 0';
     }
-    
+
     if (!imageFile && !formData.imagenUrl.trim()) {
       newErrors.imagenUrl = 'Debes adjuntar una imagen';
     }
-    
+
     if (formData.ingredientesDefault.length === 0) {
       newErrors.ingredientes = 'Debe incluir al menos un ingrediente';
     }
-    
+
+    const proteinaInvalida = formData.proteinasExtras.some((p) => !p.nombre.trim() || p.precio < 0);
+    if (proteinaInvalida) {
+      newErrors.proteinas = 'Revisa las proteinas extras: nombre requerido y precio mayor o igual a 0';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -117,13 +149,13 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
       let imagenUrlFinal = formData.imagenUrl;
 
@@ -132,20 +164,24 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
         imagenUrlFinal = await uploadImageToCloudinary(imageFile);
       }
 
+      const payload = {
+        ...formData,
+        imagenUrl: imagenUrlFinal,
+        proteinasExtras: formData.proteinasExtras.map((p) => ({ nombre: p.nombre.trim(), precio: Number(p.precio) || 0 })),
+      };
+
       const url = buildApiUrl('/api/salads');
       const method = isEditing ? 'PUT' : 'POST';
-      const body = isEditing 
-        ? { ...formData, imagenUrl: imagenUrlFinal, id: salad!._id }
-        : { ...formData, imagenUrl: imagenUrlFinal };
-      
+      const body = isEditing ? { ...payload, id: salad!._id } : payload;
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
         onSuccess();
         onClose();
@@ -163,24 +199,60 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
   };
 
   const handleAddIngredient = () => {
-    if (!newIngredient.trim()) return;
-    
-    if (formData.ingredientesDefault.includes(newIngredient.trim())) {
+    const ingredient = newIngredient.trim();
+    if (!ingredient) return;
+
+    if (formData.ingredientesDefault.some((ing) => ing.toLowerCase() === ingredient.toLowerCase())) {
       alert('Este ingrediente ya existe');
       return;
     }
-    
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
-      ingredientesDefault: [...prev.ingredientesDefault, newIngredient.trim()],
+      ingredientesDefault: [...prev.ingredientesDefault, ingredient],
     }));
     setNewIngredient('');
   };
 
   const handleRemoveIngredient = (ingredient: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      ingredientesDefault: prev.ingredientesDefault.filter(i => i !== ingredient),
+      ingredientesDefault: prev.ingredientesDefault.filter((i) => i !== ingredient),
+    }));
+  };
+
+  const handleAddProtein = () => {
+    const nombre = newProteinName.trim();
+    const precio = Number(newProteinPrice);
+
+    if (!nombre) {
+      alert('Ingresa el nombre de la proteina');
+      return;
+    }
+
+    if (Number.isNaN(precio) || precio < 0) {
+      alert('El precio de la proteina debe ser mayor o igual a 0');
+      return;
+    }
+
+    if (formData.proteinasExtras.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase())) {
+      alert('Esta proteina ya existe');
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      proteinasExtras: [...prev.proteinasExtras, { nombre, precio }],
+    }));
+
+    setNewProteinName('');
+    setNewProteinPrice('');
+  };
+
+  const handleRemoveProtein = (nombre: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      proteinasExtras: prev.proteinasExtras.filter((p) => p.nombre !== nombre),
     }));
   };
 
@@ -188,44 +260,31 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setErrors(prev => ({ ...prev, imagenUrl: 'El archivo debe ser una imagen' }));
+      setErrors((prev) => ({ ...prev, imagenUrl: 'El archivo debe ser una imagen' }));
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setErrors(prev => ({ ...prev, imagenUrl: 'La imagen no puede superar 5MB' }));
+      setErrors((prev) => ({ ...prev, imagenUrl: 'La imagen no puede superar 5MB' }));
       return;
     }
 
     const objectUrl = URL.createObjectURL(file);
     setImageFile(file);
     setImagePreview(objectUrl);
-    setErrors(prev => {
+    setErrors((prev) => {
       const next = { ...prev };
       delete next.imagenUrl;
       return next;
     });
   };
 
-  useEffect(() => {
-    return () => {
-      if (imagePreview.startsWith('blob:')) {
-        URL.revokeObjectURL(imagePreview);
-      }
-    };
-  }, [imagePreview]);
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {isEditing ? 'Editar Ensalada' : 'Nueva Ensalada'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
+          <h2 className="text-2xl font-bold text-gray-800">{isEditing ? 'Editar Ensalada' : 'Nueva Ensalada'}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -233,18 +292,11 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Imagen preview */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">Vista previa de imagen</label>
             <div className="relative h-48 bg-gray-100 rounded-lg overflow-hidden">
               {imagePreview ? (
-                <Image
-                  src={imagePreview}
-                  alt="Preview"
-                  fill
-                  className="object-cover"
-                  onError={() => setImagePreview('')}
-                />
+                <Image src={imagePreview} alt="Preview" fill className="object-cover" onError={() => setImagePreview('')} />
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-400">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -255,11 +307,8 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
             </div>
           </div>
 
-          {/* Imagen */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Imagen *
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Imagen *</label>
             <input
               type="file"
               accept="image/*"
@@ -268,21 +317,16 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
                 errors.imagenUrl ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            <p className="text-xs text-gray-500">
-              Formatos sugeridos: JPG, PNG o WEBP. Tamaño máximo: 5MB.
-            </p>
+            <p className="text-xs text-gray-500">Formatos sugeridos: JPG, PNG o WEBP. Tamano maximo: 5MB.</p>
             {errors.imagenUrl && <p className="text-red-500 text-sm">{errors.imagenUrl}</p>}
           </div>
 
-          {/* Nombre */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Nombre *
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Nombre *</label>
             <input
               type="text"
               value={formData.nombre}
-              onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, nombre: e.target.value }))}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${
                 errors.nombre ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -291,17 +335,14 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
             {errors.nombre && <p className="text-red-500 text-sm">{errors.nombre}</p>}
           </div>
 
-          {/* Precio */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Precio base *
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Precio base *</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
               <input
                 type="number"
                 value={formData.precioBase}
-                onChange={(e) => setFormData(prev => ({ ...prev, precioBase: Number(e.target.value) }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, precioBase: Number(e.target.value) }))}
                 className={`w-full pl-8 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${
                   errors.precioBase ? 'border-red-500' : 'border-gray-300'
                 }`}
@@ -312,56 +353,44 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
             {errors.precioBase && <p className="text-red-500 text-sm">{errors.precioBase}</p>}
           </div>
 
-          {/* Descripción */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Descripción
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Descripcion</label>
             <textarea
               value={formData.descripcion}
-              onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, descripcion: e.target.value }))}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Descripción de la ensalada..."
+              placeholder="Descripcion de la ensalada..."
               rows={3}
             />
           </div>
 
-          {/* Ingredientes */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Ingredientes por defecto *
-            </label>
-            
-            {/* Lista de ingredientes */}
+            <label className="block text-sm font-medium text-gray-700">Ingredientes por defecto *</label>
             <div className="flex flex-wrap gap-2 mb-3">
               {formData.ingredientesDefault.map((ingredient) => (
-                <span
-                  key={ingredient}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
-                >
+                <span key={ingredient} className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
                   {ingredient}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveIngredient(ingredient)}
-                    className="hover:text-green-900"
-                  >
+                  <button type="button" onClick={() => handleRemoveIngredient(ingredient)} className="hover:text-green-900">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      <path
+                        fillRule="evenodd"
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   </button>
                 </span>
               ))}
             </div>
-            
+
             {errors.ingredientes && <p className="text-red-500 text-sm mb-2">{errors.ingredientes}</p>}
-            
-            {/* Agregar ingrediente */}
+
             <div className="flex gap-2">
               <input
                 type="text"
                 value={newIngredient}
                 onChange={(e) => setNewIngredient(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddIngredient())}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddIngredient())}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 placeholder="Nuevo ingrediente"
               />
@@ -375,14 +404,61 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
             </div>
           </div>
 
-          {/* Estado activo */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Proteinas extras (opcional)</label>
+
+            <div className="flex flex-wrap gap-2 mb-3">
+              {formData.proteinasExtras.map((proteina) => (
+                <span key={proteina.nombre} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                  {proteina.nombre} (+${proteina.precio.toLocaleString('es-CO')})
+                  <button type="button" onClick={() => handleRemoveProtein(proteina.nombre)} className="hover:text-blue-900">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path
+                        fillRule="evenodd"
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+
+            {errors.proteinas && <p className="text-red-500 text-sm mb-2">{errors.proteinas}</p>}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={newProteinName}
+                onChange={(e) => setNewProteinName(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Nombre (ej: Tofu)"
+              />
+              <input
+                type="number"
+                min="0"
+                value={newProteinPrice}
+                onChange={(e) => setNewProteinPrice(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Precio"
+              />
+              <button
+                type="button"
+                onClick={handleAddProtein}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Agregar proteina
+              </button>
+            </div>
+          </div>
+
           {isEditing && (
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
                 id="estaActiva"
                 checked={formData.estaActiva}
-                onChange={(e) => setFormData(prev => ({ ...prev, estaActiva: e.target.checked }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, estaActiva: e.target.checked }))}
                 className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
               />
               <label htmlFor="estaActiva" className="text-sm font-medium text-gray-700">
@@ -391,7 +467,6 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
             </div>
           )}
 
-          {/* Botones */}
           <div className="flex gap-4 pt-4 border-t border-gray-200">
             <button
               type="button"
@@ -413,8 +488,10 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
                   </svg>
                   {uploadingImage ? 'Subiendo imagen...' : 'Guardando...'}
                 </span>
+              ) : isEditing ? (
+                'Guardar cambios'
               ) : (
-                isEditing ? 'Guardar cambios' : 'Crear ensalada'
+                'Crear ensalada'
               )}
             </button>
           </div>

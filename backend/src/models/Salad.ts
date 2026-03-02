@@ -4,6 +4,10 @@ export interface ISalad extends Document {
   nombre: string;
   precioBase: number;
   ingredientesDefault: string[];
+  proteinasExtras: Array<{
+    nombre: string;
+    precio: number;
+  }>;
   imagenUrl: string;
   descripcion?: string;
   estaActiva: boolean;
@@ -28,6 +32,27 @@ const SaladSchema = new Schema<ISalad>(
       type: [String],
       required: [true, 'Los ingredientes por defecto son requeridos'],
       default: [],
+    },
+    proteinasExtras: {
+      type: [
+        {
+          nombre: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+          precio: {
+            type: Number,
+            required: true,
+            min: [0, 'El precio de la proteina no puede ser negativo'],
+          },
+        },
+      ],
+      default: [
+        { nombre: 'Pollo', precio: 5000 },
+        { nombre: 'Atun', precio: 6000 },
+        { nombre: 'Huevo', precio: 3500 },
+      ],
     },
     imagenUrl: {
       type: String,
