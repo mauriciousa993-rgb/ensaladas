@@ -76,17 +76,30 @@ export default function SaladForm({ salad, onClose, onSuccess }: SaladFormProps)
   };
 
   const uploadImageToCloudinary = async (file: File): Promise<string> => {
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-    const folder = process.env.NEXT_PUBLIC_CLOUDINARY_FOLDER;
+    const signatureResponse = await fetch(buildApiUrl('/api/uploads/cloudinary-signature'), {
+      method: 'POST',
+    });
 
-    if (!cloudName || !uploadPreset) {
-      throw new Error('Faltan variables NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME o NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET');
+    const signaturePayload = await signatureResponse.json();
+    const signatureData = signaturePayload?.data;
+
+    if (!signatureResponse.ok || !signaturePayload?.success || !signatureData) {
+      throw new Error(signaturePayload?.error || 'No se pudo generar firma de Cloudinary');
     }
+
+    const { cloudName, apiKey, folder, timestamp, signature } = signatureData as {
+      cloudName: string;
+      apiKey: string;
+      folder: string;
+      timestamp: number;
+      signature: string;
+    };
 
     const data = new FormData();
     data.append('file', file);
-    data.append('upload_preset', uploadPreset);
+    data.append('api_key', apiKey);
+    data.append('timestamp', String(timestamp));
+    data.append('signature', signature);
     if (folder) data.append('folder', folder);
 
     const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {

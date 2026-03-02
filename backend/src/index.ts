@@ -1,6 +1,7 @@
 ﻿﻿import express, { Request, Response, NextFunction } from 'express';
 import cors, { CorsOptions } from 'cors';
 import dotenv from 'dotenv';
+import { createHash } from 'crypto';
 import connectDB from './config/database';
 import { Salad } from './models/Salad';
 import { Order, EstadoPago } from './models/Order';
@@ -65,6 +66,15 @@ function normalizeOrder<T extends Record<string, any>>(order: T): T & { fechaCre
   };
 }
 
+function signCloudinaryParams(params: Record<string, string>, apiSecret: string): string {
+  const toSign = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join('&');
+
+  return createHash('sha1').update(`${toSign}${apiSecret}`).digest('hex');
+}
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
@@ -72,6 +82,37 @@ connectDB();
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true, service: 'ensaladas-backend' });
+});
+
+app.post('/api/uploads/cloudinary-signature', (_req: Request, res: Response) => {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const folder = process.env.CLOUDINARY_FOLDER || 'ensaladas';
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    return res.status(500).json({
+      success: false,
+      error: 'Cloudinary no configurado en servidor',
+    });
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = signCloudinaryParams(
+    { folder, timestamp: String(timestamp) },
+    apiSecret
+  );
+
+  return res.json({
+    success: true,
+    data: {
+      cloudName,
+      apiKey,
+      folder,
+      timestamp,
+      signature,
+    },
+  });
 });
 
 app.get('/api/salads', async (_req: Request, res: Response) => {

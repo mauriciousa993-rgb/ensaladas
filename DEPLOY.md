@@ -13,6 +13,10 @@
    - `CORS_ORIGINS` (ejemplo: `https://tu-frontend.vercel.app,https://*.vercel.app`)
    - `FRONTEND_URL` (ejemplo: `https://tu-frontend.vercel.app`)
    - `WOMPI_REDIRECT_URL` (ejemplo: `https://tu-frontend.vercel.app/payment/response`)
+   - `CLOUDINARY_CLOUD_NAME`
+   - `CLOUDINARY_API_KEY`
+   - `CLOUDINARY_API_SECRET`
+   - `CLOUDINARY_FOLDER` (opcional, ejemplo: `ensaladas`)
 4. Despliega y verifica:
    - `https://tu-backend.onrender.com/health` debe responder `{ ok: true, ... }`
 
@@ -26,6 +30,7 @@
    - `NEXT_PUBLIC_APP_URL=https://tu-frontend.vercel.app`
    - `NEXT_PUBLIC_API_BASE_URL=https://tu-backend.onrender.com`
    - `NEXT_PUBLIC_WOMPI_REDIRECT_URL=https://tu-frontend.vercel.app/payment/response`
+   - (Opcional solo fallback local sin backend remoto) `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`
 4. Despliega.
 
 ## 3) Validación cruzada
