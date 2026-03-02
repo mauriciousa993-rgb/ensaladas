@@ -228,3 +228,43 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    await dbConnect();
+
+    const searchParams = request.nextUrl.searchParams;
+    const ordenId = searchParams.get('id');
+    const numeroOrden = searchParams.get('numeroOrden');
+
+    if (!ordenId && !numeroOrden) {
+      return NextResponse.json(
+        { success: false, error: 'Se requiere id o numeroOrden para eliminar la orden' },
+        { status: 400 }
+      );
+    }
+
+    const orden = ordenId
+      ? await Order.findByIdAndDelete(ordenId)
+      : await Order.findOneAndDelete({ numeroOrden });
+
+    if (!orden) {
+      return NextResponse.json(
+        { success: false, error: 'Orden no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Orden eliminada correctamente',
+      data: orden,
+    });
+  } catch (error) {
+    console.error('Error al eliminar orden:', error);
+    return NextResponse.json(
+      { success: false, error: 'Error al eliminar orden' },
+      { status: 500 }
+    );
+  }
+}

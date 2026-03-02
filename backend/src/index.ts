@@ -480,6 +480,42 @@ app.patch('/api/orders', async (req: Request, res: Response) => {
   }
 });
 
+app.delete('/api/orders', async (req: Request, res: Response) => {
+  try {
+    const id = typeof req.query.id === 'string' ? req.query.id : '';
+    const numeroOrden = typeof req.query.numeroOrden === 'string' ? req.query.numeroOrden : '';
+
+    if (!id && !numeroOrden) {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere id o numeroOrden para eliminar la orden',
+      });
+    }
+
+    const orden = id
+      ? await Order.findByIdAndDelete(id).lean()
+      : await Order.findOneAndDelete({ numeroOrden }).lean();
+
+    if (!orden) {
+      return res.status(404).json({
+        success: false,
+        error: 'Orden no encontrada',
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Orden eliminada correctamente',
+      data: normalizeOrder(orden),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: 'Error al eliminar la orden',
+    });
+  }
+});
+
 app.patch('/api/orders/:numeroOrden/estado', async (req: Request, res: Response) => {
   try {
     const { estadoOrden } = req.body;

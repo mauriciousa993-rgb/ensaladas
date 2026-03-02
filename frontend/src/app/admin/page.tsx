@@ -110,6 +110,28 @@ export default function AdminDashboard() {
     }
   };
 
+  const eliminarOrden = async (ordenId: string, numeroOrden: string) => {
+    if (!confirm(`¿Seguro que deseas eliminar la orden #${numeroOrden}? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/orders?id=${ordenId}`), {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'No se pudo eliminar la orden');
+      }
+
+      await cargarOrdenes();
+    } catch (error) {
+      console.error('Error eliminando orden:', error);
+      alert('Error al eliminar la orden');
+    }
+  };
+
   // Obtener siguiente estado
   const getSiguienteEstado = (estadoActual: string): string | null => {
     const indiceActual = ESTADOS_ORDEN.findIndex(e => e.valor === estadoActual);
@@ -307,17 +329,25 @@ export default function AdminDashboard() {
                             {formatearFecha(orden.fechaCreacion)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {getSiguienteEstado(orden.estadoOrden) && (
+                            <div className="flex items-center gap-2">
+                              {getSiguienteEstado(orden.estadoOrden) && (
+                                <button
+                                  onClick={() => actualizarEstado(orden._id, getSiguienteEstado(orden.estadoOrden)!)}
+                                  className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                                >
+                                  Avanzar
+                                </button>
+                              )}
+                              {!getSiguienteEstado(orden.estadoOrden) && (
+                                <span className="text-gray-400 text-sm">Completado</span>
+                              )}
                               <button
-                                onClick={() => actualizarEstado(orden._id, getSiguienteEstado(orden.estadoOrden)!)}
-                                className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                                onClick={() => eliminarOrden(orden._id, orden.numeroOrden)}
+                                className="px-3 py-1 bg-red-50 text-red-600 text-sm rounded-lg hover:bg-red-100 transition-colors"
                               >
-                                Avanzar →
+                                Eliminar
                               </button>
-                            )}
-                            {!getSiguienteEstado(orden.estadoOrden) && (
-                              <span className="text-gray-400 text-sm">✓ Completado</span>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       ))}
