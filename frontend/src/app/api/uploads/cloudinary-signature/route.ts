@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
+import { isDemoMode } from '@/lib/demoMode';
 
 function signCloudinaryParams(params: Record<string, string>, apiSecret: string): string {
   const toSign = Object.keys(params)
@@ -11,6 +12,13 @@ function signCloudinaryParams(params: Record<string, string>, apiSecret: string)
 }
 
 export async function POST() {
+  if (isDemoMode()) {
+    return NextResponse.json(
+      { success: false, error: 'Demo mode: subida de imágenes deshabilitada' },
+      { status: 403 }
+    );
+  }
+
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;

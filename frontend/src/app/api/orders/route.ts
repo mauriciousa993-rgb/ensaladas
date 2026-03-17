@@ -3,6 +3,8 @@ import dbConnect from '@/lib/mongodb';
 import { Order, MetodoPago, EstadoPago, generateNumeroOrden, EstadoOrden } from '@/models/Order';
 import { notificarNuevoPedido } from '@/lib/whatsapp';
 import { orderRequestSchema, getValidationErrors } from '@/lib/validations/orderValidation';
+import { isDemoMode } from '@/lib/demoMode';
+import { demoStats, getDemoOrders } from '@/lib/demoData';
 
 // Función para generar URL de pago simulada (placeholder para Wompi)
 function generarUrlPagoSimulada(numeroOrden: string, total: number): string {
@@ -17,6 +19,53 @@ function generarUrlPagoSimulada(numeroOrden: string, total: number): string {
 
 export async function POST(request: NextRequest) {
   try {
+    if (isDemoMode()) {
+      const body = await request.json().catch(() => ({}));
+      const validation = orderRequestSchema.safeParse(body);
+
+      if (!validation.success) {
+        const errors = validation.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        }));
+
+        const errorMessage = errors.map((e) => e.message).join(', ');
+
+        return NextResponse.json(
+          { success: false, error: errorMessage, validationErrors: errors },
+          { status: 400 }
+        );
+      }
+
+      const validatedBody = validation.data;
+      const numeroOrden = `ORD-DEMO-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const redirectUrl = process.env.NEXT_PUBLIC_WOMPI_REDIRECT_URL || `${appUrl}/payment/response`;
+      const urlPago =
+        validatedBody.metodoPago === MetodoPago.PSE
+          ? `https://sandbox.wompi.co/payment-requests/demo?reference=${encodeURIComponent(numeroOrden)}&redirect_url=${encodeURIComponent(redirectUrl)}`
+          : undefined;
+
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            ordenId: `demo-${Date.now()}`,
+            numeroOrden,
+            estadoPago: EstadoPago.PENDIENTE,
+            metodoPago: validatedBody.metodoPago,
+            total: validatedBody.total,
+            urlPago,
+            mensaje:
+              validatedBody.metodoPago === MetodoPago.EFECTIVO
+                ? 'Demo: orden creada (no se guarda).'
+                : 'Demo: orden creada (no se guarda). Redirigiendo a pago simulado.',
+          },
+        },
+        { status: 201 }
+      );
+    }
+
     await dbConnect();
 
     const body = await request.json();
@@ -136,6 +185,27 @@ export async function POST(request: NextRequest) {
 // GET para obtener órdenes (para el admin)
 export async function GET(request: NextRequest) {
   try {
+    if (isDemoMode()) {
+      const searchParams = request.nextUrl.searchParams;
+      const filtroFecha = searchParams.get('fecha');
+      const orders = getDemoOrders();
+
+      let filtered = orders;
+      if (filtroFecha === 'hoy') {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        filtered = orders.filter((o) => new Date(o.fechaCreacion).getTime() >= startOfDay.getTime());
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          ordenes: filtered,
+          stats: demoStats(filtered),
+        },
+      });
+    }
+
     await dbConnect();
     
     const searchParams = request.nextUrl.searchParams;
@@ -190,6 +260,23 @@ export async function GET(request: NextRequest) {
 // PATCH para actualizar estado de una orden
 export async function PATCH(request: NextRequest) {
   try {
+    if (isDemoMode()) {
+      const body = await request.json().catch(() => ({}));
+      const { ordenId, nuevoEstado } = body || {};
+
+      if (!ordenId || !nuevoEstado) {
+        return NextResponse.json(
+          { success: false, error: 'Se requiere ordenId y nuevoEstado' },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: { _id: ordenId, estadoOrden: nuevoEstado },
+      });
+    }
+
     await dbConnect();
     
     const body = await request.json();
@@ -231,6 +318,13 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    if (isDemoMode()) {
+      return NextResponse.json(
+        { success: false, error: 'Demo mode: operación no disponible' },
+        { status: 403 }
+      );
+    }
+
     await dbConnect();
 
     const searchParams = request.nextUrl.searchParams;

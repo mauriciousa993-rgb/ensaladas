@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import { Salad } from '@/models/Salad';
+import { isDemoMode } from '@/lib/demoMode';
+import { getDemoSalads } from '@/lib/demoData';
 
 // GET - Obtener todas las ensaladas (activas e inactivas para admin)
 export async function GET(request: NextRequest) {
   try {
+    if (isDemoMode()) {
+      const searchParams = request.nextUrl.searchParams;
+      const todas = searchParams.get('todas') === 'true';
+      const salads = getDemoSalads();
+      return NextResponse.json({
+        success: true,
+        data: todas ? salads : salads.filter((s) => s.estaActiva),
+      });
+    }
+
     await dbConnect();
     
     const searchParams = request.nextUrl.searchParams;
@@ -29,6 +41,13 @@ export async function GET(request: NextRequest) {
 // POST - Crear nueva ensalada
 export async function POST(request: NextRequest) {
   try {
+    if (isDemoMode()) {
+      return NextResponse.json(
+        { success: false, error: 'Demo mode: operación no disponible' },
+        { status: 403 }
+      );
+    }
+
     await dbConnect();
     
     const body = await request.json();
@@ -69,6 +88,13 @@ export async function POST(request: NextRequest) {
 // PUT - Actualizar ensalada
 export async function PUT(request: NextRequest) {
   try {
+    if (isDemoMode()) {
+      return NextResponse.json(
+        { success: false, error: 'Demo mode: operación no disponible' },
+        { status: 403 }
+      );
+    }
+
     await dbConnect();
     
     const body = await request.json();
@@ -127,6 +153,13 @@ export async function PUT(request: NextRequest) {
 // DELETE - Eliminar ensalada (soft delete)
 export async function DELETE(request: NextRequest) {
   try {
+    if (isDemoMode()) {
+      return NextResponse.json(
+        { success: false, error: 'Demo mode: operación no disponible' },
+        { status: 403 }
+      );
+    }
+
     await dbConnect();
     
     const searchParams = request.nextUrl.searchParams;
