@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
       if (tipo === 'sales') {
         const salesByDate: Record<string, { revenue: number; orders: number }> = {};
-        const salesByPaymentMethod = { Efectivo: 0, PSE: 0 };
+        const salesByPaymentMethod: Record<'Efectivo' | 'PSE', number> = { Efectivo: 0, PSE: 0 };
         let totalRevenue = 0;
         let totalOrders = 0;
 
@@ -37,7 +37,6 @@ export async function GET(request: NextRequest) {
           salesByDate[date].orders += 1;
 
           if (order.metodoPago === 'Efectivo' || order.metodoPago === 'PSE') {
-            // @ts-expect-error demo data uses runtime keys
             salesByPaymentMethod[order.metodoPago] += order.total;
           }
 
